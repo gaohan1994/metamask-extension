@@ -944,7 +944,7 @@
         "@metamask/base-controller": true,
         "@metamask/contract-metadata": true,
         "@metamask/assets-controllers>@metamask/controller-utils": true,
-        "@metamask/core-backend": true,
+        "@metamask/assets-controllers>@metamask/core-backend": true,
         "@metamask/controller-utils>@metamask/eth-query": true,
         "@metamask/keyring-api": true,
         "@metamask/keyring-snap-client": true,
@@ -957,7 +957,7 @@
         "@tanstack/react-query>@tanstack/query-core": true,
         "async-mutex": true,
         "ethereumjs-util>bn.js": true,
-        "immer": true,
+        "@metamask/assets-controllers>immer": true,
         "@metamask/assets-controller>lodash-es": true,
         "@metamask/assets-controllers>multiformats": true,
         "reselect": true,
@@ -2541,7 +2541,7 @@
       "packages": {
         "@ethersproject/providers": true,
         "@ngraveio/bc-ur>assert": true,
-        "@metamask/transaction-controller>@metamask/nonce-tracker>async-mutex": true
+        "async-mutex": true
       }
     },
     "@metamask/notification-services-controller": {
@@ -2890,6 +2890,14 @@
         "@metamask/ramps-controller>bignumber.js": true,
         "cockatiel": true,
         "eslint>fast-deep-equal": true
+      }
+    },
+    "@metamask/transaction-pay-controller>@metamask/ramps-controller": {
+      "globals": {
+        "URL": true
+      },
+      "packages": {
+        "@metamask/transaction-pay-controller>@metamask/controller-utils": true
       }
     },
     "@metamask/rate-limit-controller": {
@@ -3285,7 +3293,7 @@
         "ethereumjs-util>bn.js": true,
         "buffer": true,
         "eth-method-registry": true,
-        "@metamask/transaction-controller>ethereum-cryptography": true,
+        "ethereum-cryptography": true,
         "webpack>events": true,
         "@metamask/assets-controller>lodash-es": true,
         "@metamask/transaction-controller>uuid": true
@@ -3306,7 +3314,7 @@
         "@metamask/keyring-controller": true,
         "@metamask/metamask-eth-abis": true,
         "@metamask/network-controller": true,
-        "@metamask/ramps-controller": true,
+        "@metamask/transaction-pay-controller>@metamask/ramps-controller": true,
         "@metamask/transaction-pay-controller>@metamask/sentinel-api-service": true,
         "@metamask/transaction-controller": true,
         "@metamask/utils": true,
@@ -3753,11 +3761,6 @@
       }
     },
     "@metamask/phishing-controller>ethereum-cryptography>@noble/hashes": {
-      "globals": {
-        "TextEncoder": true
-      }
-    },
-    "@metamask/transaction-controller>ethereum-cryptography>@noble/hashes": {
       "globals": {
         "TextEncoder": true
       }
@@ -4612,15 +4615,6 @@
         "tslib": true
       }
     },
-    "@metamask/transaction-controller>@metamask/nonce-tracker>async-mutex": {
-      "globals": {
-        "clearTimeout": true,
-        "setTimeout": true
-      },
-      "packages": {
-        "tslib": true
-      }
-    },
     "string.prototype.matchall>es-abstract>available-typed-arrays": {
       "packages": {
         "string.prototype.matchall>es-abstract>typed-array-length>possible-typed-array-names": true
@@ -5445,16 +5439,6 @@
         "@metamask/phishing-controller>ethereum-cryptography>@noble/hashes": true
       }
     },
-    "@metamask/transaction-controller>ethereum-cryptography": {
-      "globals": {
-        "TextDecoder": true,
-        "crypto": true,
-        "module": true
-      },
-      "packages": {
-        "@metamask/transaction-controller>ethereum-cryptography>@noble/hashes": true
-      }
-    },
     "ethereumjs-util>ethereum-cryptography": {
       "globals": {
         "Buffer.from": true
@@ -5842,6 +5826,11 @@
       },
       "packages": {
         "eth-ens-namehash>idna-uts46-hx>punycode": true
+      }
+    },
+    "@metamask/assets-controllers>immer": {
+      "globals": {
+        "Iterator": true
       }
     },
     "string.prototype.matchall>internal-slot": {
