@@ -87,6 +87,21 @@ describe('getAssetsControllerMessenger', () => {
       }),
     );
   });
+
+  it('delegates MultichainTransactionsController transactionConfirmed (core#10585)', () => {
+    const messenger = getRootMessenger<never, never>();
+    const delegateSpy = jest.spyOn(messenger, 'delegate');
+
+    getAssetsControllerMessenger(messenger);
+
+    expect(delegateSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        events: expect.arrayContaining([
+          'MultichainTransactionsController:transactionConfirmed',
+        ]),
+      }),
+    );
+  });
 });
 
 describe('getAssetsControllerInitMessenger', () => {
