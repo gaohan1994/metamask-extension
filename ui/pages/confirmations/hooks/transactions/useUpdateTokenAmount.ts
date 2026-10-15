@@ -5,21 +5,11 @@ import { BigNumber } from 'bignumber.js';
 import { Interface } from '@ethersproject/abi';
 import { useConfirmContext } from '../../context/confirm';
 import { parseStandardTokenTransactionData } from '../../../../../shared/lib/transaction.utils';
-import {
-  getMoneyAccountFlow,
-  MoneyAccountFlow,
-} from '../../../../../shared/lib/money/money-account-flow';
 import { getTokenTransferData } from '../../utils/transaction-pay';
 import { updateEditableParams } from '../../../../store/actions';
 import { updateAtomicBatchData } from '../../../../store/controller-actions/transaction-controller';
-import {
-  updateMoneyAccountDepositAmount,
-  updateMoneyAccountWithdrawAmount,
-} from '../../../../store/controller-actions/transaction-pay-controller';
 import { useTransactionPayPrimaryRequiredToken } from '../pay/useTransactionPayData';
 import { useDispatch } from '../../../../store/hooks';
-import { beginPayAmountEncode, endPayAmountEncode } from './pay-amount-encode';
-import { useTransactionAccountOverride } from './useTransactionAccountOverride';
 
 const ERC20_ABI = ['function transfer(address to, uint256 amount)'];
 let erc20Interface: Interface | null = null;
@@ -40,20 +30,6 @@ type PendingAmountUpdate = {
   transactionId: string;
   fromAmountRaw: string;
 };
-
-function holdConfirmWhileEncoding(
-  transactionId: string,
-  pending: Promise<unknown>,
-): void {
-  const generation = beginPayAmountEncode(transactionId);
-  // `.finally()` rethrows, so the chain has to end in `.catch`. The caller
-  // logs the original rejection.
-  pending
-    .finally(() => {
-      endPayAmountEncode(transactionId, generation);
-    })
-    .catch(() => undefined);
-}
 
 export function useUpdateTokenAmount() {
   const dispatch = useDispatch();
@@ -79,7 +55,6 @@ export function useUpdateTokenAmount() {
   );
 
   const primaryRequiredToken = useTransactionPayPrimaryRequiredToken();
-  const accountOverride = useTransactionAccountOverride();
 
   const decimals = primaryRequiredToken?.decimals;
 
@@ -100,49 +75,8 @@ export function useUpdateTokenAmount() {
     pendingUpdate.transactionId === transactionId &&
     amountRaw === pendingUpdate.fromAmountRaw;
 
-  const moneyAccountFlow = useMemo(
-    () => getMoneyAccountFlow(transactionMeta),
-    [transactionMeta],
-  );
-
   const updateTokenAmount = useCallback(
-    (amountHuman: string) => {
-      // Money deposits are a placeholder approve + deposit batch with no
-      // transfer calldata to parse. The background commit re-encodes both
-      // calls and writes requiredAssets so TransactionPayController can
-      // fetch quotes. Without this, typed amounts stay in local UI state.
-      if (moneyAccountFlow === MoneyAccountFlow.Deposit) {
-        const pending = updateMoneyAccountDepositAmount(
-          transactionId,
-          amountHuman,
-        );
-        // The previous quote stays executable until this write lands.
-        holdConfirmWhileEncoding(transactionId, pending);
-        pending.catch((error) => {
-          console.error('Failed to update money account deposit amount', error);
-        });
-        return;
-      }
-
-      // Placeholder withdraw + transfer batch has no calldata to parse. The
-      // background commit re-encodes both calls (vault rate + recipient).
-      // Confirm patches the returned hexes onto the approval clone.
-      if (moneyAccountFlow === MoneyAccountFlow.Withdraw) {
-        const pending = updateMoneyAccountWithdrawAmount(
-          transactionId,
-          amountHuman,
-          accountOverride,
-        );
-        holdConfirmWhileEncoding(transactionId, pending);
-        pending.catch((error) => {
-          console.error(
-            'Failed to update money account withdrawal amount',
-            error,
-          );
-        });
-        return;
-      }
-
+    async (amountHuman: string) => {
       if (!data || !to || decimals === undefined) {
         return;
       }
@@ -167,7 +101,7 @@ export function useUpdateTokenAmount() {
       setPendingUpdate({ transactionId, fromAmountRaw: amountRaw });
 
       if (nestedCallIndex !== undefined) {
-        updateAtomicBatchData({
+        await updateAtomicBatchData({
           transactionId,
           transactionIndex: nestedCallIndex,
           transactionData: newData,
@@ -188,17 +122,7 @@ export function useUpdateTokenAmount() {
         }),
       );
     },
-    [
-      accountOverride,
-      amountRaw,
-      data,
-      decimals,
-      dispatch,
-      moneyAccountFlow,
-      nestedCallIndex,
-      to,
-      transactionId,
-    ],
+    [amountRaw, data, decimals, dispatch, nestedCallIndex, to, transactionId],
   );
 
   return {

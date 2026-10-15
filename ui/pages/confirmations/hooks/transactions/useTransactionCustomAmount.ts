@@ -35,6 +35,7 @@ import {
 } from '../../selectors/feature-flags';
 import { isSubsidizedRoute } from '../../utils/relay-fixed-spread';
 import { usePayWithNoFeeToken } from '../pay/usePayWithNoFeeToken';
+import { useUpdateTransactionPayAmount } from '../pay/useUpdateTransactionPayAmount';
 import { useTransactionPayToken } from '../pay/useTransactionPayToken';
 import { usePayTokenAccountBalance } from '../pay/usePayTokenAccountBalance';
 import {
@@ -52,7 +53,6 @@ import { useAccountTokensLoading } from '../send/useAccountTokensLoading';
 import { DepositPrefillStatus, useDepositPrefill } from './useDepositPrefill';
 import { useTransactionAccountOverride } from './useTransactionAccountOverride';
 import { useTransactionCustomAmountPercentageMetrics } from './useTransactionCustomAmountPercentageMetrics';
-import { useUpdateTokenAmount } from './useUpdateTokenAmount';
 
 export const MAX_LENGTH = 28;
 const DEBOUNCE_DELAY = 500;
@@ -131,8 +131,19 @@ export function useTransactionCustomAmount({
     payToken && isNoFeeToken(payToken.address, String(payToken.chainId)),
   );
 
-  const { updateTokenAmount: updateTokenAmountCallback } =
-    useUpdateTokenAmount();
+  const { updateTransactionPayAmount } = useUpdateTransactionPayAmount();
+  const updateTokenAmountCallback = useCallback(
+    (amountHuman: string) => {
+      // Rejected encodes must not surface as unhandled rejections. Callers
+      // fire this from keystrokes and do not await it.
+      Promise.resolve(updateTransactionPayAmount(amountHuman)).catch(
+        (error: unknown) => {
+          console.error('Failed to update transaction pay amount', error);
+        },
+      );
+    },
+    [updateTransactionPayAmount],
+  );
   const totals = useTransactionPayTotals();
 
   const debounceRef = useRef<DebouncedFunc<(value: string) => void> | null>(

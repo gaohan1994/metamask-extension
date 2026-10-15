@@ -8,6 +8,9 @@ import {
   setPaymentOverride,
   createMoneyAccountDepositTransaction,
   createMoneyAccountWithdrawTransaction,
+  commitTransactionPayAmount,
+  getMoneyAccountDepositAmountCalls,
+  getMoneyAccountWithdrawAmountCalls,
   updateMoneyAccountDepositAmount,
   updateMoneyAccountWithdrawAmount,
   getLastMoneyAccountWithdrawAmount,
@@ -163,6 +166,65 @@ describe('transaction-pay-controller actions', () => {
       expect(mockSubmitRequestToBackground).toHaveBeenCalledWith(
         'createMoneyAccountWithdrawTransaction',
         [accountOverride],
+      );
+    });
+  });
+
+  describe('getMoneyAccountDepositAmountCalls', () => {
+    it('forwards the transaction id and human amount', async () => {
+      mockSubmitRequestToBackground.mockResolvedValue([]);
+
+      await getMoneyAccountDepositAmountCalls('tx-deposit', '10');
+
+      expect(mockSubmitRequestToBackground).toHaveBeenCalledWith(
+        'getMoneyAccountDepositAmountCalls',
+        ['tx-deposit', '10'],
+      );
+    });
+  });
+
+  describe('getMoneyAccountWithdrawAmountCalls', () => {
+    it('forwards the recipient override', async () => {
+      const recipientOverride =
+        '0xabcdef1234567890abcdef1234567890abcdef12' as const;
+
+      await getMoneyAccountWithdrawAmountCalls(
+        'tx-withdraw',
+        '1.25',
+        recipientOverride,
+      );
+
+      expect(mockSubmitRequestToBackground).toHaveBeenCalledWith(
+        'getMoneyAccountWithdrawAmountCalls',
+        ['tx-withdraw', '1.25', recipientOverride],
+      );
+    });
+  });
+
+  describe('commitTransactionPayAmount', () => {
+    it('forwards calls and the required asset amount together', async () => {
+      mockSubmitRequestToBackground.mockResolvedValue(true);
+
+      const didWrite = await commitTransactionPayAmount({
+        transactionId: 'tx-deposit',
+        calls: [
+          { nestedTransactionIndex: 0, transactionData: '0xaaa1' },
+          { nestedTransactionIndex: 1, transactionData: '0xbbb2' },
+        ],
+        requiredAssetAmount: '0xf4240',
+      });
+
+      expect(didWrite).toBe(true);
+      expect(mockSubmitRequestToBackground).toHaveBeenCalledWith(
+        'commitTransactionPayAmount',
+        [
+          'tx-deposit',
+          [
+            { nestedTransactionIndex: 0, data: '0xaaa1' },
+            { nestedTransactionIndex: 1, data: '0xbbb2' },
+          ],
+          '0xf4240',
+        ],
       );
     });
   });

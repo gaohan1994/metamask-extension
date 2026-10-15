@@ -97,6 +97,45 @@ describe('commitTransactionPayUpdates', () => {
     expect(transaction.requiredAssets?.[0]?.amount).toBe('0x0');
   });
 
+  it('writes a single call as the transaction data', () => {
+    const transaction = {
+      ...createTransaction(),
+      nestedTransactions: [
+        {
+          to: '0x1111111111111111111111111111111111111111',
+          data: '0xold',
+          value: '0x0',
+        },
+      ],
+    } as unknown as TransactionMeta;
+    const updateTransaction = jest.fn();
+    const { messenger } = createMoneyPayMessengerMock({
+      handlers: {
+        'TransactionController:getState': () => ({
+          transactions: [transaction],
+        }),
+        'TransactionController:updateTransaction': updateTransaction,
+      },
+    });
+
+    commitTransactionPayUpdates(
+      messenger,
+      TRANSACTION_ID,
+      [{ nestedTransactionIndex: 0, data: FIRST_CALL_DATA }],
+      'test note',
+    );
+
+    const [nextTransaction] = updateTransaction.mock.calls[0];
+    expect(nextTransaction.txParams.data).toBe(FIRST_CALL_DATA);
+    expect(nextTransaction.nestedTransactions).toStrictEqual([
+      {
+        to: '0x1111111111111111111111111111111111111111',
+        data: FIRST_CALL_DATA,
+        value: '0x0',
+      },
+    ]);
+  });
+
   it('does not write when the transaction is gone', () => {
     const updateTransaction = jest.fn();
     const { messenger } = createMoneyPayMessengerMock({

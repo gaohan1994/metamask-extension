@@ -1,4 +1,5 @@
 import { buildMoneyAccountWithdrawBatch } from '@metamask/money-account-utils';
+import type { GetAmountDataResponse } from '@metamask/transaction-pay-controller';
 import { isStrictHexString, type Hex } from '@metamask/utils';
 import type { MoneyAccountWithdrawAmountUpdate } from '../../../../../shared/lib/money/withdraw-amount-commit';
 import {
@@ -14,6 +15,36 @@ import { getMoneyPayContext, type MoneyPayMessenger } from './pay-context';
 export type { MoneyAccountWithdrawAmountUpdate };
 
 const LOG_TAG = '[Money Account]';
+
+/**
+ * Encodes the withdraw and transfer calls for a human mUSD amount without
+ * writing them. Callers commit the calls.
+ *
+ * @param messenger - Messenger used to encode.
+ * @param transactionId - Id of the Money Account withdrawal transaction.
+ * @param amountHuman - Exact human-readable mUSD amount.
+ * @param recipientOverride - Address that receives the redeemed mUSD, if set.
+ * @returns Nested calldata updates, or empty when the amount cannot be encoded.
+ */
+export async function getMoneyAccountWithdrawAmountCalls(
+  messenger: MoneyPayMessenger,
+  transactionId: string,
+  amountHuman: string,
+  recipientOverride?: Hex,
+): Promise<GetAmountDataResponse['updates']> {
+  const amountRaw = parseMusdHumanAmount(amountHuman);
+  if (amountRaw === undefined) {
+    return [];
+  }
+
+  const transaction = getTransactionMeta(messenger, transactionId);
+  if (!transaction) {
+    return [];
+  }
+
+  const recipient = resolveWithdrawRecipient(messenger, recipientOverride);
+  return await encodeWithdrawCalldata(messenger, amountRaw, recipient);
+}
 
 /**
  * Re-encodes the nested withdraw + transfer calls for a new human amount and
@@ -51,14 +82,14 @@ export async function updateMoneyAccountWithdrawAmount(
   const isCurrent = beginAmountCommit(transactionId);
 
   try {
-    const recipient = resolveWithdrawRecipient(messenger, recipientOverride);
-    const updates = await encodeWithdrawCalldata(
+    const updates = await getMoneyAccountWithdrawAmountCalls(
       messenger,
-      amountRaw,
-      recipient,
+      transactionId,
+      amountHuman,
+      recipientOverride,
     );
 
-    if (!isCurrent()) {
+    if (!isCurrent() || updates.length < 2) {
       return false;
     }
 

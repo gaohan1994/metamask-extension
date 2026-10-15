@@ -309,6 +309,20 @@ function applyNestedAndParentCalldata(
     return;
   }
 
+  // A single call is the transaction itself, so it needs no EIP-7702 wrapper.
+  if (updates.length === 1) {
+    const transactionData = updates[0].data;
+    if (transaction.txParams) {
+      transaction.txParams.data = transactionData;
+    }
+    if (transaction.nestedTransactions?.length === 1) {
+      transaction.nestedTransactions = [
+        { ...transaction.nestedTransactions[0], data: transactionData },
+      ];
+    }
+    return;
+  }
+
   const from = transaction.txParams?.from as Hex | undefined;
   if (from && transaction.nestedTransactions?.length) {
     const { nestedTransactions, transactionData } = updateEIP7702BatchData({

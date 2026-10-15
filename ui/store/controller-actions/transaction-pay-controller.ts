@@ -219,6 +219,78 @@ export async function updateMoneyAccountWithdrawAmount(
   ]);
 }
 
+export type TransactionPayAmountCall = {
+  nestedTransactionIndex: number;
+  data: Hex;
+};
+
+/**
+ * Encodes Money Account deposit calls for a human amount without committing
+ * them. The caller writes the calls and required asset amount together.
+ *
+ * @param transactionId - Id of the Money Account deposit transaction.
+ * @param amountHuman - Exact human-readable amount.
+ * @returns Nested calldata updates.
+ */
+export async function getMoneyAccountDepositAmountCalls(
+  transactionId: string,
+  amountHuman: string,
+): Promise<TransactionPayAmountCall[]> {
+  return await submitRequestToBackground('getMoneyAccountDepositAmountCalls', [
+    transactionId,
+    amountHuman,
+  ]);
+}
+
+/**
+ * Encodes Money Account withdrawal calls for a human amount without committing
+ * them.
+ *
+ * @param transactionId - Id of the Money Account withdrawal transaction.
+ * @param amountHuman - Exact human-readable amount.
+ * @param recipientOverride - Optional EVM address to receive the redeemed mUSD.
+ * @returns Nested calldata updates.
+ */
+export async function getMoneyAccountWithdrawAmountCalls(
+  transactionId: string,
+  amountHuman: string,
+  recipientOverride?: Hex,
+): Promise<TransactionPayAmountCall[]> {
+  return await submitRequestToBackground('getMoneyAccountWithdrawAmountCalls', [
+    transactionId,
+    amountHuman,
+    recipientOverride,
+  ]);
+}
+
+/**
+ * Writes Pay calldata and the required asset amount in one transaction update.
+ *
+ * @param options - Commit request.
+ * @param options.calls - Nested calls to apply. `transactionData` is the new calldata.
+ * @param options.requiredAssetAmount - New `requiredAssets[0].amount`, when known.
+ * @param options.transactionId - Confirmation being updated.
+ * @returns Whether transaction metadata was written.
+ */
+export async function commitTransactionPayAmount({
+  calls,
+  requiredAssetAmount,
+  transactionId,
+}: {
+  calls: { nestedTransactionIndex: number; transactionData: Hex }[];
+  requiredAssetAmount?: Hex;
+  transactionId: string;
+}): Promise<boolean> {
+  return await submitRequestToBackground('commitTransactionPayAmount', [
+    transactionId,
+    calls.map(({ nestedTransactionIndex, transactionData }) => ({
+      nestedTransactionIndex,
+      data: transactionData,
+    })),
+    requiredAssetAmount,
+  ]);
+}
+
 /**
  * Prepares and commits a Money Account deposit amount in the background:
  * re-encodes the nested approve + deposit calldata for the new amount and

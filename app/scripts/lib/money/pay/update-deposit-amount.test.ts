@@ -7,6 +7,7 @@ import {
 import type { Hex } from '@metamask/utils';
 import {
   getMoneyAccountAmountData,
+  getMoneyAccountDepositAmountCalls,
   updateMoneyAccountDepositAmount,
 } from './update-deposit-amount';
 import { createMoneyPayMessengerMock, VAULT_CONFIG_MOCK } from './test-mocks';
@@ -365,5 +366,49 @@ describe('getMoneyAccountAmountData', () => {
 
     expect(result).toStrictEqual({ updates: [] });
     expect(buildDepositBatchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('getMoneyAccountDepositAmountCalls', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    buildDepositBatchMock.mockResolvedValue({
+      approveTx: {
+        params: {
+          to: VAULT_CONFIG_MOCK.underlyingToken,
+          data: APPROVE_DATA,
+          value: '0x0',
+        },
+        type: TransactionType.tokenMethodApprove,
+      },
+      depositTx: {
+        params: {
+          to: VAULT_CONFIG_MOCK.tellerAddress,
+          data: DEPOSIT_DATA,
+          value: '0x0',
+        },
+        type: TransactionType.moneyAccountDeposit,
+      },
+    });
+  });
+
+  it('returns encoded calls and does not write the transaction', async () => {
+    const { messenger, updateTransaction } = setup();
+
+    const updates = await getMoneyAccountDepositAmountCalls(
+      messenger,
+      TRANSACTION_ID,
+      '1.0000001',
+    );
+
+    expect(updates).toStrictEqual([
+      { nestedTransactionIndex: 0, data: APPROVE_DATA },
+      { nestedTransactionIndex: 1, data: DEPOSIT_DATA },
+    ]);
+    // 1.0000001 mUSD rounds down to 1.000000 base units.
+    expect(buildDepositBatchMock).toHaveBeenCalledWith(
+      expect.objectContaining({ amount: 1_000_000n }),
+    );
+    expect(updateTransaction).not.toHaveBeenCalled();
   });
 });

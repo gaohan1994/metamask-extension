@@ -22,11 +22,16 @@ import {
 import { createMoneyAccountDepositTransaction } from '../lib/money/pay/create-deposit-transaction';
 import { createMoneyAccountWithdrawTransaction } from '../lib/money/pay/create-withdraw-transaction';
 import { getPaymentOverrideData } from '../lib/money/pay/payment-override-callback';
+import { commitTransactionPayUpdates } from '../lib/money/pay/amount-commit';
 import {
   getMoneyAccountAmountData,
+  getMoneyAccountDepositAmountCalls,
   updateMoneyAccountDepositAmount,
 } from '../lib/money/pay/update-deposit-amount';
-import { updateMoneyAccountWithdrawAmount } from '../lib/money/pay/update-withdraw-amount';
+import {
+  getMoneyAccountWithdrawAmountCalls,
+  updateMoneyAccountWithdrawAmount,
+} from '../lib/money/pay/update-withdraw-amount';
 import { subscribePersistPayMetadata } from '../lib/money/pay/persist-pay-metadata';
 import type {
   MoneyPayMessenger,
@@ -189,50 +194,63 @@ function getApi(
       transactionId: string,
       amountHuman: string,
     ) => {
-      // Refresh the payment-token snapshot before committing so source amounts
-      // can use a current balanceRaw. Prefill often runs while the snapshot is
-      // still 0/stale (tx `from` is the vault).
-      // `updatePaymentToken` is synchronous: it resolves the token and writes
-      // state before returning, so the refresh cannot land after the amount
-      // commit below and only throws synchronously.
-      const paymentToken =
-        messengerClient.state?.transactionData?.[transactionId]?.paymentToken;
-      if (paymentToken) {
-        try {
-          messengerClient.updatePaymentToken({
-            transactionId,
-            tokenAddress: paymentToken.address,
-            chainId: paymentToken.chainId,
-          });
-        } catch {
-          // Balance/rates may still be settling; amount commit below still runs.
-        }
-      }
-
-      // Re-assert quote-required on every amount update so confirmations
-      // created before seedDepositPayConfig still quote. Leave atomic and
-      // isMaxAmount alone — Max / uncapped 100% prefill set those separately.
-      // Forcing `atomic: false` here made Relay quote EXACT_INPUT for every
-      // typed amount (no embedded vault txs). Non-max deposits must stay
-      // atomic so Relay uses EXACT_OUTPUT, matching mobile.
-      messengerClient.setTransactionConfig(transactionId, (config) => {
-        config.isQuoteRequired = true;
-      });
+      prepareMoneyAccountDepositAmountUpdate(messengerClient, transactionId);
       return updateMoneyAccountDepositAmount(
         moneyPayMessenger,
         transactionId,
         amountHuman,
       );
     },
+    getMoneyAccountDepositAmountCalls: async (
+      transactionId: string,
+      amountHuman: string,
+    ) => {
+      prepareMoneyAccountDepositAmountUpdate(messengerClient, transactionId);
+      return getMoneyAccountDepositAmountCalls(
+        moneyPayMessenger,
+        transactionId,
+        amountHuman,
+      );
+    },
+    getMoneyAccountWithdrawAmountCalls: (
+      transactionId: string,
+      amountHuman: string,
+      recipientOverride?: Hex,
+    ) => {
+      const resolvedRecipient = resolveWithdrawRecipient(
+        messengerClient,
+        transactionId,
+        recipientOverride,
+      );
+      return getMoneyAccountWithdrawAmountCalls(
+        moneyPayMessenger,
+        transactionId,
+        amountHuman,
+        resolvedRecipient,
+      );
+    },
+    commitTransactionPayAmount: (
+      transactionId: string,
+      updates: { nestedTransactionIndex: number; data: Hex }[],
+      requiredAssetAmount?: Hex,
+    ) =>
+      commitTransactionPayUpdates(
+        moneyPayMessenger,
+        transactionId,
+        updates,
+        'Transaction Pay: update amount',
+        requiredAssetAmount,
+      ),
     updateMoneyAccountWithdrawAmount: (
       transactionId: string,
       amountHuman: string,
       recipientOverride?: Hex,
     ) => {
-      const resolvedRecipient =
-        recipientOverride ??
-        messengerClient.state?.transactionData?.[transactionId]
-          ?.accountOverride;
+      const resolvedRecipient = resolveWithdrawRecipient(
+        messengerClient,
+        transactionId,
+        recipientOverride,
+      );
       return updateMoneyAccountWithdrawAmount(
         moneyPayMessenger,
         transactionId,
@@ -293,6 +311,62 @@ function getApi(
  * @param transactionId - Created transaction id.
  * @param accountOverride - Currently selected EVM account address.
  */
+/**
+ * Refreshes the payment-token snapshot and re-asserts that a deposit must
+ * quote, before calldata for the new amount is committed.
+ *
+ * `updatePaymentToken` is synchronous: it resolves the token and writes state
+ * before returning, so the refresh cannot land after the amount commit and
+ * only throws synchronously. Leave `atomic` and `isMaxAmount` alone — Max and
+ * uncapped 100% prefill set those separately. Forcing `atomic: false` here
+ * made Relay quote EXACT_INPUT for every typed amount.
+ *
+ * @param messengerClient - TransactionPayController to update.
+ * @param transactionId - Deposit confirmation being updated.
+ */
+function prepareMoneyAccountDepositAmountUpdate(
+  messengerClient: TransactionPayController,
+  transactionId: string,
+): void {
+  const paymentToken =
+    messengerClient.state?.transactionData?.[transactionId]?.paymentToken;
+  if (paymentToken) {
+    try {
+      messengerClient.updatePaymentToken({
+        transactionId,
+        tokenAddress: paymentToken.address,
+        chainId: paymentToken.chainId,
+      });
+    } catch {
+      // Balance/rates may still be settling; the amount commit still runs.
+    }
+  }
+
+  messengerClient.setTransactionConfig(transactionId, (config) => {
+    config.isQuoteRequired = true;
+  });
+}
+
+/**
+ * Resolves the withdrawal recipient: an explicit override, otherwise the Pay
+ * account override stored for this confirmation.
+ *
+ * @param messengerClient - TransactionPayController holding Pay config.
+ * @param transactionId - Withdrawal confirmation being updated.
+ * @param recipientOverride - Address that receives the redeemed mUSD, if set.
+ * @returns The recipient to encode, when one is available.
+ */
+function resolveWithdrawRecipient(
+  messengerClient: TransactionPayController,
+  transactionId: string,
+  recipientOverride?: Hex,
+): Hex | undefined {
+  return (
+    recipientOverride ??
+    messengerClient.state?.transactionData?.[transactionId]?.accountOverride
+  );
+}
+
 function seedAccountOverride(
   messengerClient: TransactionPayController,
   transactionId: string,

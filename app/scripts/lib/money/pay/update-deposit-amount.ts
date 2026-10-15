@@ -1,4 +1,5 @@
 import { buildMoneyAccountDepositBatch } from '@metamask/money-account-utils';
+import { BigNumber } from 'bignumber.js';
 import type {
   GetAmountDataRequest,
   GetAmountDataResponse,
@@ -54,6 +55,40 @@ export async function getMoneyAccountAmountData(
 }
 
 /**
+ * Encodes the approve and deposit calls for a human mUSD amount without
+ * writing them. Callers commit the calls with the required asset amount.
+ *
+ * Rounds down so a Max amount taken from an 18-decimal pay token cannot
+ * encode more mUSD than that balance can fund.
+ *
+ * @param messenger - Messenger used to encode.
+ * @param transactionId - Id of the Money Account deposit transaction.
+ * @param amountHuman - Exact human-readable mUSD amount.
+ * @returns Nested calldata updates, or empty when the amount cannot be encoded.
+ */
+export async function getMoneyAccountDepositAmountCalls(
+  messenger: MoneyPayMessenger,
+  transactionId: string,
+  amountHuman: string,
+): Promise<GetAmountDataResponse['updates']> {
+  const amountRaw = parseMusdHumanAmount(amountHuman, BigNumber.ROUND_DOWN);
+  if (amountRaw === undefined) {
+    return [];
+  }
+
+  const transaction = getTransactionMeta(messenger, transactionId);
+  if (!transaction) {
+    return [];
+  }
+
+  const { updates } = await getMoneyAccountAmountData(messenger, {
+    amount: amountRaw.toString(10),
+    transaction,
+  });
+  return updates;
+}
+
+/**
  * Encodes the approve and deposit calls, then commits them with the required
  * amount through the shared Pay update. Superseded intents, and amounts whose
  * encoded calls are already stored, resolve `false`.
@@ -72,7 +107,7 @@ export async function updateMoneyAccountDepositAmount(
 ): Promise<boolean> {
   pruneStaleAmountCommits(messenger);
 
-  const amountRaw = parseMusdHumanAmount(amountHuman);
+  const amountRaw = parseMusdHumanAmount(amountHuman, BigNumber.ROUND_DOWN);
   if (amountRaw === undefined) {
     return false;
   }
@@ -85,10 +120,11 @@ export async function updateMoneyAccountDepositAmount(
   const isCurrent = beginAmountCommit(transactionId);
 
   try {
-    const { updates } = await getMoneyAccountAmountData(messenger, {
-      amount: amountRaw.toString(10),
-      transaction,
-    });
+    const updates = await getMoneyAccountDepositAmountCalls(
+      messenger,
+      transactionId,
+      amountHuman,
+    );
 
     if (!isCurrent() || !updates.length) {
       return false;

@@ -15,6 +15,7 @@ import { createMoneyAccountDepositTransaction } from '../lib/money/pay/create-de
 import { createMoneyAccountWithdrawTransaction } from '../lib/money/pay/create-withdraw-transaction';
 import {
   getMoneyAccountAmountData,
+  getMoneyAccountDepositAmountCalls,
   updateMoneyAccountDepositAmount,
 } from '../lib/money/pay/update-deposit-amount';
 import { getPaymentOverrideData } from '../lib/money/pay/payment-override-callback';
@@ -41,12 +42,14 @@ jest.mock('../lib/money/pay/create-withdraw-transaction', () => ({
 }));
 jest.mock('../lib/money/pay/update-deposit-amount', () => ({
   getMoneyAccountAmountData: jest.fn(),
+  getMoneyAccountDepositAmountCalls: jest.fn(),
   updateMoneyAccountDepositAmount: jest.fn(),
 }));
 jest.mock('../lib/money/pay/payment-override-callback', () => ({
   getPaymentOverrideData: jest.fn(),
 }));
 jest.mock('../lib/money/pay/update-withdraw-amount', () => ({
+  getMoneyAccountWithdrawAmountCalls: jest.fn(),
   updateMoneyAccountWithdrawAmount: jest.fn(),
 }));
 const createDepositTransactionMock = jest.mocked(
@@ -56,6 +59,9 @@ const createWithdrawTransactionMock = jest.mocked(
   createMoneyAccountWithdrawTransaction,
 );
 const updateDepositAmountMock = jest.mocked(updateMoneyAccountDepositAmount);
+const getDepositAmountCallsMock = jest.mocked(
+  getMoneyAccountDepositAmountCalls,
+);
 const updateWithdrawAmountMock = jest.mocked(updateMoneyAccountWithdrawAmount);
 const getMoneyAccountAmountDataMock = jest.mocked(getMoneyAccountAmountData);
 const getPaymentOverrideDataMock = jest.mocked(getPaymentOverrideData);
@@ -843,6 +849,35 @@ describe('TransactionPayControllerInit', () => {
         api.updateMoneyAccountDepositAmount('tx-1', '10'),
       ).resolves.toBe(true);
       expect(updateDepositAmountMock).toHaveBeenCalledWith(
+        expect.anything(),
+        'tx-1',
+        '10',
+      );
+    });
+  });
+
+  describe('api.getMoneyAccountDepositAmountCalls', () => {
+    it('re-asserts quote-required then returns encoded calls', async () => {
+      const { api, messengerClient } =
+        TransactionPayControllerInit(getInitRequestMock());
+      if (!api) {
+        throw new Error('Expected init result to expose an api');
+      }
+      getDepositAmountCallsMock.mockResolvedValue([
+        { nestedTransactionIndex: 0, data: '0xaaa1' },
+      ]);
+
+      const result = await api.getMoneyAccountDepositAmountCalls('tx-1', '10');
+
+      expect(result).toStrictEqual([
+        { nestedTransactionIndex: 0, data: '0xaaa1' },
+      ]);
+      const updater = jest.mocked(messengerClient.setTransactionConfig).mock
+        .calls[0][1];
+      const config: { isQuoteRequired?: boolean } = {};
+      updater(config as never);
+      expect(config).toEqual({ isQuoteRequired: true });
+      expect(getDepositAmountCallsMock).toHaveBeenCalledWith(
         expect.anything(),
         'tx-1',
         '10',
